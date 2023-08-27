@@ -1,61 +1,74 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score
 
-# Load the dataset
-train_df = pd.read_csv("data/train.csv")
-test_df = pd.read_csv("data/test_x.csv")
 
-# Extract the target variable "Öbek İsmi" from the training data
-y_train = train_df["Öbek İsmi"]
+def load_data(file_path):
+    return pd.read_csv(file_path)
 
-# Drop unnecessary columns (if needed)
-X_train = train_df.drop(["Öbek İsmi", "index"], axis=1)
-X_test = test_df.drop(["index"], axis=1)
 
-# Perform one-hot encoding for categorical variables
-X_train = pd.get_dummies(X_train, columns=["Cinsiyet", "Yaş Grubu", "Medeni Durum", "Eğitim Düzeyi", "İstihdam Durumu", "Yaşadığı Şehir", "En Çok İlgilendiği Ürün Grubu", "Eğitime Devam Etme Durumu"])
-X_test = pd.get_dummies(X_test, columns=["Cinsiyet", "Yaş Grubu", "Medeni Durum", "Eğitim Düzeyi", "İstihdam Durumu", "Yaşadığı Şehir", "En Çok İlgilendiği Ürün Grubu", "Eğitime Devam Etme Durumu"])
+def preprocess_data(df, is_train=True):
+    if is_train:
+        y = df["Öbek İsmi"]
+        df = df.drop(["Öbek İsmi", "index"], axis=1)
+    else:
+        df = df.drop(["index"], axis=1)
 
-# Initialize a Random Forest Classifier
-rf_classifier = RandomForestClassifier(random_state=42)
+    df = pd.get_dummies(
+        df,
+        columns=[
+            "Cinsiyet",
+            "Yaş Grubu",
+            "Medeni Durum",
+            "Eğitim Düzeyi",
+            "İstihdam Durumu",
+            "Yaşadığı Şehir",
+            "En Çok İlgilendiği Ürün Grubu",
+            "Eğitime Devam Etme Durumu",
+        ],
+    )
 
-# Define the hyperparameter grid for tuning
-param_grid = {
-    'n_estimators': [100, 200, 300],
-    'max_depth': [None, 10, 20],
-}
+    if is_train:
+        return df, y
+    else:
+        return df
 
-# Perform grid search for hyperparameter tuning
-grid_search = GridSearchCV(rf_classifier, param_grid, cv=5, n_jobs=-1)
-grid_search.fit(X_train, y_train)
 
-# Get the best model from the grid search
-best_rf_model = grid_search.best_estimator_
+def train_model(X_train, y_train):
+    rf_classifier = RandomForestClassifier(random_state=42)
+    param_grid = {
+        "n_estimators": [100, 200, 300],
+        "max_depth": [None, 10, 20],
+    }
 
-# Train the best model on the entire training dataset
-best_rf_model.fit(X_train, y_train)
+    grid_search = GridSearchCV(rf_classifier, param_grid, cv=5, n_jobs=-1)
+    grid_search.fit(X_train, y_train)
 
-# Make predictions on the test dataset
-y_pred = best_rf_model.predict(X_test)
+    return grid_search.best_estimator_
 
-# Save the predictions to a DataFrame
-test_df["Öbek İsmi"] = y_pred
 
-# Get only index and Öbek İsmi columns
-test_df = test_df[["index", "Öbek İsmi"]]
+def save_predictions(test_df, y_pred):
+    test_df["Öbek İsmi"] = y_pred
+    submission_df = test_df[["index", "Öbek İsmi"]].rename(columns={"index": "id"})
+    submission_df.to_csv("submission.csv", index=False)
 
-# Rename the index column to id
-test_df.rename(columns={'index': 'id'}, inplace=True)
 
-# Save the test DataFrame with predictions to a CSV file
-test_df.to_csv("submission.csv", index=False)
+if __name__ == "__main__":
+    train_file_path = "data/train.csv"
+    test_file_path = "data/test_x.csv"
 
-# Evaluate the model using accuracy and classification report
-train_acc = accuracy_score(y_train, best_rf_model.predict(X_train))
-print(f"Training Accuracy: {train_acc:.2f}")
+    train_df = load_data(train_file_path)
+    test_df = load_data(test_file_path)
 
-# You can further evaluate the model as needed, e.g., using classification reports
-# classification_rep = classification_report(y_true, y_pred)
-# print(classification_rep)
+    X_train, y_train = preprocess_data(train_df, is_train=True)
+    X_test = preprocess_data(test_df, is_train=False)
+
+    best_rf_model = train_model(X_train, y_train)
+
+    y_pred = best_rf_model.predict(X_test)
+
+    save_predictions(test_df, y_pred)
+
+    train_acc = accuracy_score(y_train, best_rf_model.predict(X_train))
+    print(f"Training Accuracy: {train_acc:.2f}")
